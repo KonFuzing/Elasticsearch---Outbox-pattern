@@ -1,5 +1,6 @@
 Test go test -v ./internal/services/...
 Work go run e:\Work\ES\cmd\worker\main.go
+Clean go run e:Work\ES\cmd\cleanup\main.go
 Main go run e:\Work\ES\cmd\main.go
 
 
