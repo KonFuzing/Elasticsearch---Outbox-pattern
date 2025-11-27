@@ -46,57 +46,40 @@ func main() {
 	// เราจะใช้ Repository ที่มีอยู่แล้วเพื่อดึงข้อมูล
 	repo := repositories.NewMySQLRepository(db)
 
-	// --- 4. Get all Branch IDs from MySQL ---
-	rows, err := db.QueryContext(ctx, "SELECT id FROM branch ORDER BY id ASC")
+	// --- 4. Get ALL rich branch data in a SINGLE query ---
+	log.Println("Fetching all rich branch data from MySQL in a single query...")
+	allBranches, err := repo.GetAllRichBranchData(ctx, db)
 	if err != nil {
-		log.Fatalf("Failed to query branch IDs: %v", err)
-	}
-	defer rows.Close()
-
-	var branchIDs []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			log.Printf("Warning: Failed to scan branch ID: %v", err)
-			continue
-		}
-		branchIDs = append(branchIDs, id)
+		log.Fatalf("Failed to get all rich branch data: %v", err)
 	}
 
-	if len(branchIDs) == 0 {
+	if len(allBranches) == 0 {
 		log.Println("No branches found in the database. Exiting.")
 		return
 	}
 
-	log.Printf("Found %d branches to backfill.", len(branchIDs))
+	log.Printf("Found %d branches to backfill.", len(allBranches))
 
-	// --- 5. Loop through each ID, get rich data, and index to Elasticsearch ---
+	// --- 5. Loop through the results and index to Elasticsearch ---
 	successCount := 0
-	for _, id := range branchIDs {
-		log.Printf("Backfilling branch ID: %d...", id)
-
-		// ใช้ฟังก์ชันที่เรามีอยู่แล้วเพื่อดึงข้อมูลที่สมบูรณ์
-		richBranchData, err := repo.GetRichBranchData(ctx, db, id)
-		if err != nil {
-			log.Printf("ERROR: Could not get rich data for branch ID %d: %v. Skipping.", id, err)
-			continue
-		}
+	for _, branchData := range allBranches {
+		log.Printf("Indexing branch ID: %d...", branchData.ID)
 
 		// ส่งข้อมูลไป Index ใน Elasticsearch
 		_, err = esClient.Index().
 			Index("branches").
-			Id(strconv.FormatInt(id, 10)).
-			BodyJson(richBranchData).
+			Id(strconv.FormatInt(branchData.ID, 10)).
+			BodyJson(branchData).
 			Do(ctx)
 
 		if err != nil {
-			log.Printf("ERROR: Failed to index branch ID %d to Elasticsearch: %v. Skipping.", id, err)
+			log.Printf("ERROR: Failed to index branch ID %d to Elasticsearch: %v. Skipping.", branchData.ID, err)
 			continue
 		}
 		successCount++
 	}
 
 	log.Printf("--- Backfill Process Finished ---")
-	log.Printf("Successfully backfilled %d out of %d branches.", successCount, len(branchIDs))
+	log.Printf("Successfully backfilled %d out of %d branches.", successCount, len(allBranches))
 	log.Printf("Total time taken: %v", time.Since(startTime))
 }

@@ -4,6 +4,7 @@ Clean go run e:Work\ES\cmd\cleanup\main.go
 Main go run e:\Work\ES\cmd\main.go
 
 
+
 เปรียบเทียบ Outbox Pattern กับ Event-Driven Real-time Sync
 คำว่า "Event-Driven Real-time Sync" มักจะหมายถึงเทคโนโลยี Change Data Capture (CDC) ซึ่งใช้เครื่องมืออย่าง Debezium มาดักจับการเปลี่ยนแปลงจาก Transaction Log (เรียกว่า binlog ใน MySQL) ของฐานข้อมูลโดยตรง แล้วส่ง Event ออกไปที่ Message Broker (เช่น Kafka)
 
@@ -32,3 +33,23 @@ Real-time ที่สุด ✅Event จะถูกส่งออกมาท
 การผูกมัดกับฐานข้อมูล	
 ต่ำ (Loosely Coupled) ✅Application ไม่ต้องรู้ว่าฐานข้อมูลคือ MySQL หรือ Postgres ก็ได้ ตราบใดที่ยังเขียน SQL ได้	
 **สูง (Tightly Coupled)**ผูกติดกับชนิดและเวอร์ชันของฐานข้อมูลอย่างมาก (Debezium connector สำหรับ MySQL จะใช้กับ Postgres ไม่ได้)
+
+      Get All
+GET /branches/_search
+{
+  "query": {
+    "match_all": {}
+  }
+}
+
+    Get by name 
+GET branches/_search
+{
+  "query": {
+    "match": {
+      "name.th": "กทม"
+    }
+  },
+  "size": 1,
+  "from": 0
+}

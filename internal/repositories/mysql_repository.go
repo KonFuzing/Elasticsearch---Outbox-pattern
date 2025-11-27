@@ -218,3 +218,64 @@ func (r *mySQLRepository) GetRichBranchData(ctx context.Context, dbtx ports.DBTX
 
 	return &branch, nil
 }
+
+// GetAllRichBranchData ดึงข้อมูลสาขาที่สมบูรณ์ทั้งหมดใน query เดียวเพื่อทำ backfill
+func (r *mySQLRepository) GetAllRichBranchData(ctx context.Context, dbtx ports.DBTX) ([]*domain.Branch, error) {
+	const query = `
+		SELECT
+			branch.id,
+			branch.name,
+			ANY_VALUE(branch_location.province_id) AS province_id,
+			(SELECT GROUP_CONCAT(DISTINCT p.product_id) FROM branches_products p WHERE p.branch_id = branch.id) AS product_ids,
+			(SELECT GROUP_CONCAT(DISTINCT i.interest_id) FROM branches_interests i WHERE i.branch_id = branch.id) AS interest_ids
+		FROM
+			branch
+		LEFT JOIN
+			branch_location ON branch.id = branch_location.branch_id
+		GROUP BY
+			branch.id
+		ORDER BY
+			branch.id ASC;
+	`
+
+	rows, err := dbtx.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all rich branch data: %w", err)
+	}
+	defer rows.Close()
+
+	var branches []*domain.Branch
+	for rows.Next() {
+		var branch domain.Branch
+		var nameJSON, productIDsStr, interestIDsStr sql.NullString
+		var provinceID sql.NullInt64
+
+		if err := rows.Scan(&branch.ID, &nameJSON, &provinceID, &productIDsStr, &interestIDsStr); err != nil {
+			log.Printf("WARNING: could not scan row for rich branch data: %v", err)
+			continue // ข้ามแถวที่มีปัญหา
+		}
+
+		if nameJSON.Valid {
+			_ = json.Unmarshal([]byte(nameJSON.String), &branch.Name)
+		}
+		if provinceID.Valid {
+			branch.Location = &domain.BranchLocation{ProvinceID: int(provinceID.Int64)}
+		}
+		if productIDsStr.Valid && productIDsStr.String != "" {
+			ids := strings.Split(productIDsStr.String, ",")
+			branch.ProductIDs = make([]int, len(ids))
+			for i, idStr := range ids {
+				branch.ProductIDs[i], _ = strconv.Atoi(idStr)
+			}
+		}
+		if interestIDsStr.Valid && interestIDsStr.String != "" {
+			ids := strings.Split(interestIDsStr.String, ",")
+			branch.InterestIDs = make([]int, len(ids))
+			for i, idStr := range ids {
+				branch.InterestIDs[i], _ = strconv.Atoi(idStr)
+			}
+		}
+		branches = append(branches, &branch)
+	}
+	return branches, nil
+}
