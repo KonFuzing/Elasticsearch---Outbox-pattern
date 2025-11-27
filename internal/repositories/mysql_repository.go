@@ -156,7 +156,11 @@ func (r *mySQLRepository) GetRichBranchData(ctx context.Context, dbtx ports.DBTX
 			branch.name,
 			ANY_VALUE(branch_location.province_id) AS province_id,
 			(SELECT GROUP_CONCAT(DISTINCT p.product_id) FROM branches_products p WHERE p.branch_id = branch.id) AS product_ids,
-			(SELECT GROUP_CONCAT(DISTINCT i.interest_id) FROM branches_interests i WHERE i.branch_id = branch.id) AS interest_ids
+			(SELECT GROUP_CONCAT(DISTINCT i.interest_id) FROM branches_interests i WHERE i.branch_id = branch.id) AS interest_ids,
+			(SELECT MIN(po.normal_price_thb) FROM product_option po JOIN branches_products bp ON po.product_id = bp.product_id WHERE bp.branch_id = branch.id) as min_normal_price,
+			(SELECT MAX(po.normal_price_thb) FROM product_option po JOIN branches_products bp ON po.product_id = bp.product_id WHERE bp.branch_id = branch.id) as max_normal_price,
+			(SELECT MIN(po.tagthai_price_thb) FROM product_option po JOIN branches_products bp ON po.product_id = bp.product_id WHERE bp.branch_id = branch.id) as min_tagthai_price,
+			(SELECT MAX(po.tagthai_price_thb) FROM product_option po JOIN branches_products bp ON po.product_id = bp.product_id WHERE bp.branch_id = branch.id) as max_tagthai_price
 		FROM
 			branch
 		LEFT JOIN
@@ -172,6 +176,7 @@ func (r *mySQLRepository) GetRichBranchData(ctx context.Context, dbtx ports.DBTX
 	var branch domain.Branch
 	var nameJSON, productIDsStr, interestIDsStr sql.NullString
 	var provinceID sql.NullInt64
+	var minNormalPrice, maxNormalPrice, minTagthaiPrice, maxTagthaiPrice sql.NullFloat64
 
 	err := row.Scan(
 		&branch.ID,
@@ -179,6 +184,10 @@ func (r *mySQLRepository) GetRichBranchData(ctx context.Context, dbtx ports.DBTX
 		&provinceID,
 		&productIDsStr,
 		&interestIDsStr,
+		&minNormalPrice,
+		&maxNormalPrice,
+		&minTagthaiPrice,
+		&maxTagthaiPrice,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -216,6 +225,19 @@ func (r *mySQLRepository) GetRichBranchData(ctx context.Context, dbtx ports.DBTX
 		}
 	}
 
+	if minNormalPrice.Valid {
+		branch.MinNormalPrice = &minNormalPrice.Float64
+	}
+	if maxNormalPrice.Valid {
+		branch.MaxNormalPrice = &maxNormalPrice.Float64
+	}
+	if minTagthaiPrice.Valid {
+		branch.MinTagthaiPrice = &minTagthaiPrice.Float64
+	}
+	if maxTagthaiPrice.Valid {
+		branch.MaxTagthaiPrice = &maxTagthaiPrice.Float64
+	}
+
 	return &branch, nil
 }
 
@@ -227,7 +249,11 @@ func (r *mySQLRepository) GetAllRichBranchData(ctx context.Context, dbtx ports.D
 			branch.name,
 			ANY_VALUE(branch_location.province_id) AS province_id,
 			(SELECT GROUP_CONCAT(DISTINCT p.product_id) FROM branches_products p WHERE p.branch_id = branch.id) AS product_ids,
-			(SELECT GROUP_CONCAT(DISTINCT i.interest_id) FROM branches_interests i WHERE i.branch_id = branch.id) AS interest_ids
+			(SELECT GROUP_CONCAT(DISTINCT i.interest_id) FROM branches_interests i WHERE i.branch_id = branch.id) AS interest_ids,
+			(SELECT MIN(po.normal_price_thb) FROM product_option po JOIN branches_products bp ON po.product_id = bp.product_id WHERE bp.branch_id = branch.id) as min_normal_price,
+			(SELECT MAX(po.normal_price_thb) FROM product_option po JOIN branches_products bp ON po.product_id = bp.product_id WHERE bp.branch_id = branch.id) as max_normal_price,
+			(SELECT MIN(po.tagthai_price_thb) FROM product_option po JOIN branches_products bp ON po.product_id = bp.product_id WHERE bp.branch_id = branch.id) as min_tagthai_price,
+			(SELECT MAX(po.tagthai_price_thb) FROM product_option po JOIN branches_products bp ON po.product_id = bp.product_id WHERE bp.branch_id = branch.id) as max_tagthai_price
 		FROM
 			branch
 		LEFT JOIN
@@ -249,8 +275,9 @@ func (r *mySQLRepository) GetAllRichBranchData(ctx context.Context, dbtx ports.D
 		var branch domain.Branch
 		var nameJSON, productIDsStr, interestIDsStr sql.NullString
 		var provinceID sql.NullInt64
+		var minNormalPrice, maxNormalPrice, minTagthaiPrice, maxTagthaiPrice sql.NullFloat64
 
-		if err := rows.Scan(&branch.ID, &nameJSON, &provinceID, &productIDsStr, &interestIDsStr); err != nil {
+		if err := rows.Scan(&branch.ID, &nameJSON, &provinceID, &productIDsStr, &interestIDsStr, &minNormalPrice, &maxNormalPrice, &minTagthaiPrice, &maxTagthaiPrice); err != nil {
 			log.Printf("WARNING: could not scan row for rich branch data: %v", err)
 			continue // ข้ามแถวที่มีปัญหา
 		}
@@ -274,6 +301,18 @@ func (r *mySQLRepository) GetAllRichBranchData(ctx context.Context, dbtx ports.D
 			for i, idStr := range ids {
 				branch.InterestIDs[i], _ = strconv.Atoi(idStr)
 			}
+		}
+		if minNormalPrice.Valid {
+			branch.MinNormalPrice = &minNormalPrice.Float64
+		}
+		if maxNormalPrice.Valid {
+			branch.MaxNormalPrice = &maxNormalPrice.Float64
+		}
+		if minTagthaiPrice.Valid {
+			branch.MinTagthaiPrice = &minTagthaiPrice.Float64
+		}
+		if maxTagthaiPrice.Valid {
+			branch.MaxTagthaiPrice = &maxTagthaiPrice.Float64
 		}
 		branches = append(branches, &branch)
 	}
